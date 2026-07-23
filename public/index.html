@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>nova</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0A0A12; color: #F2F2F7; font-family: 'Inter', sans-serif; }
+  ::selection { background: #EC4899; color: white; }
+  input:focus, textarea:focus { border-color: #8B5CF6 !important; }
+  button { transition: opacity .15s ease, transform .1s ease; font-family: inherit; }
+  button:active { transform: scale(0.97); }
+  @keyframes novaPop { 0% { transform: scale(0.3) rotate(0deg); opacity: 1; } 100% { transform: scale(1.6) rotate(25deg); opacity: 0; } }
+  @keyframes novaSpin { to { transform: rotate(360deg); } }
+  .nova-spin { animation: novaSpin 0.9s linear infinite; display: inline-flex; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+/* ---------- tiny inline icon set (no icon-library dependency) ---------- */
+const Icon = ({ children, size = 18, ...p }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>{children}</svg>
+);
+const HeartIcon = (p) => <Icon {...p}><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8Z" fill={p.filled ? "currentColor" : "none"}/></Icon>;
+const RepeatIcon = (p) => <Icon {...p}><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></Icon>;
+const MessageIcon = (p) => <Icon {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></Icon>;
+const ShareIcon = (p) => <Icon {...p}><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></Icon>;
+const HomeIcon = (p) => <Icon {...p}><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill={p.filled ? "currentColor" : "none"}/></Icon>;
+const UserIcon = (p) => <Icon {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" fill={p.filled ? "currentColor" : "none"}/><circle cx="12" cy="7" r="4" fill={p.filled ? "currentColor" : "none"}/></Icon>;
+const LogoutIcon = (p) => <Icon {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></Icon>;
+const CameraIcon = (p) => <Icon {...p}><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></Icon>;
+const MailIcon = (p) => <Icon {...p}><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></Icon>;
+const LockIcon = (p) => <Icon {...p}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></Icon>;
+const XIcon = (p) => <Icon {...p}><path d="M18 6 6 18"/><path d="M6 6l12 12"/></Icon>;
+const CheckIcon = (p) => <Icon {...p}><path d="M20 6 9 17l-5-5"/></Icon>;
+const SparkleIcon = (p) => <Icon {...p} fill="currentColor" stroke="none"><path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Z"/></Icon>;
+const AlertIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></Icon>;
+const LoaderIcon = (p) => <span className="nova-spin"><Icon {...p}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></Icon></span>;
+
+/* ---------- API helper ---------- */
+const API = "";
+function authHeaders() {
+  const t = localStorage.getItem("nova_token");
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+async function api(path, { method = "GET", body, isForm } = {}) {
+  const res = await fetch(API + path, {
+    method,
+    headers: isForm ? authHeaders() : { "Content-Type": "application/json", ...authHeaders() },
+    body: isForm ? body : body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "حدث خطأ غير متوقع");
+  return data;
+}
+
+function NovaMark({ size = 40 }) {
+  const id = useRef("g" + Math.random().toString(36).slice(2)).current;
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+      <defs><linearGradient id={id} x1="15" y1="20" x2="85" y2="80" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stopColor="#8B5CF6" /><stop offset="0.55" stopColor="#EC4899" /><stop offset="1" stopColor="#3B82F6" />
+      </linearGradient></defs>
+      <rect width="100" height="100" rx="26" fill="#0E0E18" />
+      <path d="M30 72V28a4 4 0 0 1 6.7-3l33 40a4 4 0 0 1-3 6.6H30" stroke={`url(#${id})`} strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      <g transform="translate(70 26)"><path d="M0 -10 L2.6 -2.6 L10 0 L2.6 2.6 L0 10 L-2.6 2.6 L-10 0 L-2.6 -2.6 Z" fill="#F0A8E0" /></g>
+    </svg>
+  );
+}
+function Avatar({ user, size = 44 }) {
+  const style = { width: size, height: size, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, color: "#fff", flexShrink: 0, overflow: "hidden", fontSize: size * 0.4, background: "linear-gradient(135deg,#8B5CF6,#EC4899 55%,#3B82F6)" };
+  if (user?.avatar) return <div style={style}><img src={user.avatar} alt={user.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /></div>;
+  return <div style={style}>{user?.name?.[0]?.toUpperCase() || "?"}</div>;
+}
+function Spinner({ label }) {
+  return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 40, color: "#8C8CA6", fontSize: 14 }}><LoaderIcon size={18} />{label}</div>;
+}
+const labelStyle = { display: "block", fontSize: 12, color: "#8C8CA6", marginBottom: 6, marginTop: 14 };
+const inputStyle = { width: "100%", boxSizing: "border-box", background: "#0E0E18", border: "1px solid #26263A", borderRadius: 10, padding: "11px 12px", color: "#F2F2F7", fontSize: 14, fontFamily: "inherit", outline: "none" };
+const inputIconStyle = { position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#57576b" };
+function btnStyle(kind) {
+  const base = { width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 999, padding: "12px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", border: "1px solid transparent" };
+  if (kind === "solid") return { ...base, background: "linear-gradient(135deg,#8B5CF6,#EC4899 60%,#3B82F6)", color: "#fff" };
+  if (kind === "outline") return { ...base, background: "#fff", color: "#1a1a1a" };
+  return { ...base, background: "transparent", color: "#8C8CA6" };
+}
+const iconBtn = { display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", cursor: "pointer", fontSize: 13, color: "#8C8CA6" };
+function timeAgo(ts) {
+  const diff = Math.max(0, Date.now() - ts);
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "الآن";
+  if (m < 60) return `قبل ${m} د`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `قبل ${h} س`;
+  return `قبل ${Math.floor(h / 24)} يوم`;
+}
+
+/* ---------- login ---------- */
+function LoginScreen({ onAuthed, config }) {
+  const [mode, setMode] = useState("start");
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const googleBtnRef = useRef(null);
+
+  useEffect(() => {
+    if (!config?.googleEnabled || !window.google || mode !== "start") return;
+    window.google.accounts.id.initialize({
+      client_id: config.googleClientId,
+      callback: async (resp) => {
+        setBusy(true); setError("");
+        try {
+          const data = await api("/api/auth/google", { method: "POST", body: { credential: resp.credential } });
+          localStorage.setItem("nova_token", data.token);
+          onAuthed(data.user);
+        } catch (e) { setError(e.message); } finally { setBusy(false); }
+      },
+    });
+    if (googleBtnRef.current) {
+      window.google.accounts.id.renderButton(googleBtnRef.current, { theme: "filled_black", size: "large", width: 312, locale: "ar" });
+    }
+  }, [config, mode]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(""); setBusy(true);
+    try {
+      const path = mode === "signup" ? "/api/auth/register" : "/api/auth/login";
+      const body = mode === "signup" ? form : { email: form.email, password: form.password };
+      const data = await api(path, { method: "POST", body });
+      localStorage.setItem("nova_token", data.token);
+      onAuthed(data.user);
+    } catch (e2) { setError(e2.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 30% 0%, #1a1030 0%, #0A0A12 55%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }} dir="rtl">
+      <div style={{ marginBottom: 28, textAlign: "center" }}>
+        <NovaMark size={72} />
+        <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 30, fontWeight: 700, marginTop: 16, marginBottom: 4 }}>nova</h1>
+        <p style={{ color: "#8C8CA6", fontSize: 14, margin: 0 }}>فضاءك لمشاركة اللحظة</p>
+      </div>
+      <div style={{ width: "100%", maxWidth: 360, background: "#14141F", border: "1px solid #26263A", borderRadius: 20, padding: 24 }}>
+        {error && <div style={{ display: "flex", gap: 8, alignItems: "center", background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E", borderRadius: 10, padding: "9px 12px", fontSize: 13, marginBottom: 14 }}><AlertIcon size={15} />{error}</div>}
+
+        {mode === "start" && (
+          <>
+            {config?.googleEnabled ? (
+              <div ref={googleBtnRef} style={{ display: "flex", justifyContent: "center", marginBottom: 4 }} />
+            ) : (
+              <div style={{ fontSize: 12, color: "#57576b", textAlign: "center", border: "1px dashed #26263A", borderRadius: 10, padding: 10, marginBottom: 4 }}>
+                تسجيل الدخول عبر جوجل غير مُفعّل بعد (راجع README لتفعيله)
+              </div>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0", color: "#57576b", fontSize: 12 }}>
+              <div style={{ flex: 1, height: 1, background: "#26263A" }} />أو<div style={{ flex: 1, height: 1, background: "#26263A" }} />
+            </div>
+            <button onClick={() => setMode("login")} style={btnStyle("solid")}><MailIcon size={17} />الدخول بالبريد الإلكتروني</button>
+            <button onClick={() => setMode("signup")} style={{ ...btnStyle("ghost"), marginTop: 8 }}>ليس لديك حساب؟ أنشئ حساباً جديداً</button>
+          </>
+        )}
+
+        {(mode === "login" || mode === "signup") && (
+          <form onSubmit={submit}>
+            {mode === "signup" && (<>
+              <label style={labelStyle}>الاسم</label>
+              <input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="اسمك الكامل" required />
+            </>)}
+            <label style={labelStyle}>البريد الإلكتروني</label>
+            <div style={{ position: "relative" }}><MailIcon size={16} style={inputIconStyle} />
+              <input style={{ ...inputStyle, paddingRight: 38 }} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="you@example.com" required />
+            </div>
+            <label style={labelStyle}>كلمة المرور</label>
+            <div style={{ position: "relative" }}><LockIcon size={16} style={inputIconStyle} />
+              <input style={{ ...inputStyle, paddingRight: 38 }} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="6 أحرف على الأقل" required />
+            </div>
+            <button type="submit" disabled={busy} style={{ ...btnStyle("solid"), marginTop: 6 }}>{busy ? <LoaderIcon size={16} /> : mode === "signup" ? "إنشاء الحساب" : "دخول"}</button>
+            <button type="button" onClick={() => { setMode("start"); setError(""); }} style={{ ...btnStyle("ghost"), marginTop: 8 }}>رجوع</button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- tweet ---------- */
+function Tweet({ tweet, onLike, onRetweet }) {
+  const [burst, setBurst] = useState(false);
+  const like = () => { if (!tweet.liked) { setBurst(true); setTimeout(() => setBurst(false), 500); } onLike(tweet); };
+  return (
+    <div style={{ display: "flex", gap: 12, padding: 16, borderBottom: "1px solid #1C1C2A" }}>
+      <Avatar user={{ name: tweet.authorName, avatar: tweet.authorAvatar }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "baseline", flexWrap: "wrap" }}>
+          <span style={{ fontWeight: 700, fontSize: 14.5 }}>{tweet.authorName}</span>
+          <span style={{ color: "#8C8CA6", fontSize: 13 }}>@{tweet.authorUsername}</span>
+          <span style={{ color: "#57576b", fontSize: 12 }}>· {timeAgo(tweet.createdAt)}</span>
+        </div>
+        <p style={{ margin: "4px 0 10px", fontSize: 15, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{tweet.content}</p>
+        <div style={{ display: "flex", justifyContent: "space-between", maxWidth: 320 }}>
+          <button style={iconBtn}><MessageIcon size={17} /><span>{tweet.replies || 0}</span></button>
+          <button onClick={() => onRetweet(tweet)} style={{ ...iconBtn, color: tweet.retweeted ? "#10B981" : "#8C8CA6" }}><RepeatIcon size={18} /><span>{tweet.retweetsCount || 0}</span></button>
+          <button onClick={like} style={{ ...iconBtn, color: tweet.liked ? "#F43F5E" : "#8C8CA6", position: "relative" }}>
+            <HeartIcon size={17} filled={tweet.liked} /><span>{tweet.likesCount || 0}</span>
+            {burst && <span style={{ position: "absolute", right: -6, top: -10, color: "#EC4899", animation: "novaPop 0.5s ease-out forwards" }}><SparkleIcon size={16} /></span>}
+          </button>
+          <button style={iconBtn}><ShareIcon size={16} /></button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- feed ---------- */
+function Feed({ user, tweets, setTweets, loadingFeed }) {
+  const [text, setText] = useState("");
+  const [posting, setPosting] = useState(false);
+  const [err, setErr] = useState("");
+
+  const post = async () => {
+    if (!text.trim()) return;
+    setPosting(true); setErr("");
+    try {
+      const data = await api("/api/tweets", { method: "POST", body: { content: text.trim() } });
+      setTweets((ts) => [data.tweet, ...ts]);
+      setText("");
+    } catch (e) { setErr(e.message); } finally { setPosting(false); }
+  };
+  const like = async (t) => {
+    setTweets((ts) => ts.map((x) => x.id === t.id ? { ...x, liked: !x.liked, likesCount: x.likesCount + (x.liked ? -1 : 1) } : x));
+    try { await api(`/api/tweets/${t.id}/like`, { method: "POST" }); } catch (e) { /* leave optimistic state */ }
+  };
+  const retweet = async (t) => {
+    setTweets((ts) => ts.map((x) => x.id === t.id ? { ...x, retweeted: !x.retweeted, retweetsCount: x.retweetsCount + (x.retweeted ? -1 : 1) } : x));
+    try { await api(`/api/tweets/${t.id}/retweet`, { method: "POST" }); } catch (e) { /* leave optimistic state */ }
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 12, padding: 16, borderBottom: "1px solid #1C1C2A" }}>
+        <Avatar user={user} />
+        <div style={{ flex: 1 }}>
+          <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="بماذا تفكر؟" rows={2} maxLength={280}
+            style={{ width: "100%", boxSizing: "border-box", resize: "none", background: "transparent", border: "none", outline: "none", color: "#F2F2F7", fontSize: 16, fontFamily: "inherit" }} />
+          {err && <div style={{ color: "#F43F5E", fontSize: 12, marginBottom: 6 }}>{err}</div>}
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button onClick={post} disabled={!text.trim() || posting} style={{ ...btnStyle("solid"), width: "auto", padding: "8px 20px", opacity: text.trim() && !posting ? 1 : 0.5 }}>
+              {posting ? <LoaderIcon size={15} /> : "نشر"}
+            </button>
+          </div>
+        </div>
+      </div>
+      {loadingFeed ? <Spinner label="جارٍ تحميل التغريدات..." /> :
+        tweets.length === 0 ? <p style={{ textAlign: "center", color: "#57576b", padding: 40, fontSize: 14 }}>لا توجد تغريدات بعد. كن أول من ينشر!</p> :
+        tweets.map((t) => <Tweet key={t.id} tweet={t} onLike={like} onRetweet={retweet} />)}
+    </div>
+  );
+}
+
+/* ---------- profile ---------- */
+function ProfileScreen({ user, setUser, tweets }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(user);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const fileRef = useRef(null);
+
+  useEffect(() => { if (editing) { setDraft(user); setErr(""); } }, [editing, user]);
+
+  const pickImage = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) { setErr("الصورة كبيرة جداً (الحد الأقصى 4MB)."); return; }
+    const fd = new FormData();
+    fd.append("avatar", file);
+    setSaving(true);
+    try {
+      const data = await api("/api/auth/avatar", { method: "POST", isForm: true, body: fd });
+      setDraft(data.user);
+      setUser(data.user);
+    } catch (e2) { setErr(e2.message); } finally { setSaving(false); }
+  };
+
+  const save = async () => {
+    setErr(""); setSaving(true);
+    try {
+      const data = await api("/api/auth/me", { method: "PUT", body: { name: draft.name, username: draft.username, bio: draft.bio } });
+      setUser(data.user);
+      setEditing(false);
+    } catch (e) { setErr(e.message); } finally { setSaving(false); }
+  };
+
+  const myTweets = tweets.filter((t) => t.authorId === user.id);
+
+  return (
+    <div>
+      <div style={{ height: 110, background: "linear-gradient(120deg,#3B1E63,#5D2560 45%,#1E3A63)" }} />
+      <div style={{ padding: "0 16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: -38 }}>
+          <div style={{ border: "4px solid #0A0A12", borderRadius: "50%", background: "#0A0A12" }}><Avatar user={user} size={78} /></div>
+          <button onClick={() => setEditing(true)} style={{ ...btnStyle("outline"), width: "auto", padding: "8px 18px", marginBottom: 6 }}>تعديل الملف الشخصي</button>
+        </div>
+        <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", margin: "12px 0 0", fontSize: 20 }}>{user.name}</h2>
+        <p style={{ color: "#8C8CA6", margin: "2px 0 10px", fontSize: 14 }}>@{user.username}</p>
+        {user.bio && <p style={{ margin: "0 0 14px", fontSize: 14.5, lineHeight: 1.6 }}>{user.bio}</p>}
+        <div style={{ display: "flex", gap: 18, fontSize: 13, color: "#8C8CA6", paddingBottom: 14, borderBottom: "1px solid #1C1C2A" }}>
+          <span><b style={{ color: "#F2F2F7" }}>{myTweets.length}</b> تغريدات</span>
+        </div>
+      </div>
+      {myTweets.length === 0 ? <p style={{ textAlign: "center", color: "#57576b", padding: 40, fontSize: 14 }}>لم تنشر أي تغريدة بعد.</p> :
+        myTweets.map((t) => <Tweet key={t.id} tweet={t} onLike={() => {}} onRetweet={() => {}} />)}
+
+      {editing && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(5,5,10,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={() => setEditing(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 380, background: "#14141F", border: "1px solid #26263A", borderRadius: 18, padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <h3 style={{ margin: 0, fontFamily: "'Space Grotesk', sans-serif", fontSize: 17 }}>تعديل الملف الشخصي</h3>
+              <button onClick={() => setEditing(false)} style={{ background: "none", border: "none", color: "#8C8CA6", cursor: "pointer" }}><XIcon size={20} /></button>
+            </div>
+            {err && <div style={{ display: "flex", gap: 8, alignItems: "center", background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E", borderRadius: 10, padding: "9px 12px", fontSize: 13, marginBottom: 14 }}><AlertIcon size={15} />{err}</div>}
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+              <div style={{ position: "relative" }}>
+                <Avatar user={draft} size={84} />
+                <button onClick={() => fileRef.current?.click()} style={{ position: "absolute", bottom: -2, left: -2, background: "#0A0A12", border: "1px solid #26263A", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#F2F2F7" }}><CameraIcon size={14} /></button>
+                <input ref={fileRef} type="file" accept="image/*" hidden onChange={pickImage} />
+              </div>
+            </div>
+            <label style={labelStyle}>الاسم</label>
+            <input style={inputStyle} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+            <label style={labelStyle}>اسم المستخدم</label>
+            <div style={{ position: "relative" }}>
+              <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#57576b", fontSize: 14 }}>@</span>
+              <input style={{ ...inputStyle, paddingRight: 26 }} value={draft.username} onChange={(e) => setDraft({ ...draft, username: e.target.value })} />
+            </div>
+            <label style={labelStyle}>النبذة التعريفية</label>
+            <textarea style={{ ...inputStyle, resize: "none" }} rows={3} value={draft.bio || ""} onChange={(e) => setDraft({ ...draft, bio: e.target.value })} />
+            <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+              <button onClick={save} disabled={saving} style={{ ...btnStyle("solid"), display: "flex", gap: 6 }}>{saving ? <LoaderIcon size={16} /> : <CheckIcon size={16} />} حفظ</button>
+              <button onClick={() => setEditing(false)} style={btnStyle("outline")}>إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- app shell ---------- */
+function App() {
+  const [status, setStatus] = useState("loading");
+  const [user, setUser] = useState(null);
+  const [view, setView] = useState("feed");
+  const [tweets, setTweets] = useState([]);
+  const [loadingFeed, setLoadingFeed] = useState(false);
+  const [config, setConfig] = useState(null);
+
+  const loadTweets = async () => {
+    setLoadingFeed(true);
+    try { const data = await api("/api/tweets"); setTweets(data.tweets); } catch (e) { /* ignore */ }
+    setLoadingFeed(false);
+  };
+
+  useEffect(() => {
+    (async () => {
+      try { setConfig(await api("/api/config")); } catch { setConfig({ googleEnabled: false }); }
+      const token = localStorage.getItem("nova_token");
+      if (token) {
+        try {
+          const data = await api("/api/auth/me");
+          setUser(data.user);
+          setStatus("app");
+          await loadTweets();
+          return;
+        } catch { localStorage.removeItem("nova_token"); }
+      }
+      setStatus("auth");
+    })();
+  }, []);
+
+  const onAuthed = async (u) => { setUser(u); setStatus("app"); await loadTweets(); };
+  const logout = () => { localStorage.removeItem("nova_token"); setUser(null); setView("feed"); setStatus("auth"); };
+
+  if (status === "loading") return <div style={{ minHeight: "100vh", background: "#0A0A12" }}><Spinner label="جارٍ التحميل..." /></div>;
+  if (status === "auth" || !user) return <LoginScreen onAuthed={onAuthed} config={config} />;
+
+  return (
+    <div dir="rtl" style={{ minHeight: "100vh", background: "#0A0A12", color: "#F2F2F7" }}>
+      <div style={{ maxWidth: 600, margin: "0 auto", borderInline: "1px solid #1C1C2A", minHeight: "100vh" }}>
+        <header style={{ position: "sticky", top: 0, zIndex: 10, background: "rgba(10,10,18,0.85)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: "1px solid #1C1C2A" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}><NovaMark size={30} /><span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 17 }}>nova</span></div>
+          <button onClick={logout} style={{ ...iconBtn, fontSize: 13 }}><LogoutIcon size={16} /> خروج</button>
+        </header>
+        <main style={{ paddingBottom: 70 }}>
+          {view === "feed" ? <Feed user={user} tweets={tweets} setTweets={setTweets} loadingFeed={loadingFeed} /> : <ProfileScreen user={user} setUser={setUser} tweets={tweets} />}
+        </main>
+        <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 600, display: "flex", background: "rgba(10,10,18,0.92)", backdropFilter: "blur(8px)", borderTop: "1px solid #1C1C2A" }}>
+          <button onClick={() => setView("feed")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "10px 0", background: "none", border: "none", cursor: "pointer", color: view === "feed" ? "#F2F2F7" : "#57576b" }}>
+            <HomeIcon size={22} filled={view === "feed"} /><span style={{ fontSize: 11 }}>الرئيسية</span>
+          </button>
+          <button onClick={() => setView("profile")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "10px 0", background: "none", border: "none", cursor: "pointer", color: view === "profile" ? "#F2F2F7" : "#57576b" }}>
+            <UserIcon size={22} filled={view === "profile"} /><span style={{ fontSize: 11 }}>حسابي</span>
+          </button>
+        </nav>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
