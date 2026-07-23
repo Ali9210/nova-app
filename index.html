@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>nova</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body, #root { min-height: 100%; }
+  body { margin: 0; background: #0A0A12; color: #F2F2F7; font-family: 'Inter', Arial, sans-serif; }
+  ::selection { background: #EC4899; color: white; }
+  input:focus, textarea:focus { border-color: #8B5CF6 !important; }
+  button { transition: opacity .15s ease, transform .1s ease; font-family: inherit; }
+  button:active { transform: scale(0.97); }
+  @keyframes novaPop { 0% { transform: scale(0.3) rotate(0deg); opacity: 1; } 100% { transform: scale(1.6) rotate(25deg); opacity: 0; } }
+  @keyframes novaSpin { to { transform: rotate(360deg); } }
+  .nova-spin { animation: novaSpin 0.9s linear infinite; display: inline-flex; }
+  #boot-fallback { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #8C8CA6; font-family: Arial, sans-serif; font-size: 14px; padding: 24px; text-align: center; }
+</style>
+</head>
+<body>
+<div id="root"><div id="boot-fallback">جارٍ تحميل nova...</div></div>
+
+<script>
+window.addEventListener('error', function (ev) {
+  var root = document.getElementById('root');
+  if (root && !root.dataset.mounted) {
+    root.innerHTML = '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0A0A12;color:#F2F2F7;font-family:Arial,sans-serif;padding:24px;text-align:center;direction:rtl;">' +
+      '<div><p style="font-size:16px;margin-bottom:8px;">حدث خطأ أثناء تحميل التطبيق</p>' +
+      '<p style="font-size:12px;color:#8C8CA6;direction:ltr;">' + (ev.message || 'unknown error') + '</p></div></div>';
+  }
+});
+</script>
+
+<script>
+var e = React.createElement;
+
+/* ---------- storage helpers ---------- */
+var API = "";
+function authHeaders() {
+  var t = localStorage.getItem("nova_token");
+  return t ? { Authorization: "Bearer " + t } : {};
+}
+function apiCall(path, opts) {
+  opts = opts || {};
+  var method = opts.method || "GET";
+  var isForm = opts.isForm;
+  var body = opts.body;
+  var headers = isForm ? authHeaders() : Object.assign({ "Content-Type": "application/json" }, authHeaders());
+  return fetch(API + path, {
+    method: method,
+    headers: headers,
+    body: isForm ? body : (body ? JSON.stringify(body) : undefined)
+  }).then(function (res) {
+    return res.json().catch(function () { return {}; }).then(function (data) {
+      if (!res.ok) throw new Error(data.error || "حدث خطأ غير متوقع");
+      return data;
+    });
+  });
+}
+
+/* ---------- tiny icon helper ---------- */
+function icon(paths, size, extraProps) {
+  size = size || 18;
+  var children = paths.map(function (p) {
+    return e(p.tag || "path", Object.assign({ key: Math.random() }, p.attrs));
+  });
+  var svgProps = Object.assign({
+    width: size, height: size, viewBox: "0 0 24 24", fill: "none",
+    stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round"
+  }, extraProps || {});
+  return e("svg", svgProps, children);
+}
+function HeartIcon(p) {
+  return icon([{ attrs: { d: "M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8Z", fill: p.filled ? "currentColor" : "none" } }], p.size);
+}
+function RepeatIcon(p) {
+  return icon([
+    { attrs: { d: "m17 2 4 4-4 4" } },
+    { attrs: { d: "M3 11v-1a4 4 0 0 1 4-4h14" } },
+    { attrs: { d: "m7 22-4-4 4-4" } },
+    { attrs: { d: "M21 13v1a4 4 0 0 1-4 4H3" } }
+  ], p.size);
+}
+function MessageIcon(p) { return icon([{ attrs: { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" } }], p.size); }
+function ShareIcon(p) { return icon([{ attrs: { d: "M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" } }, { attrs: { d: "M16 6l-4-4-4 4" } }, { attrs: { d: "M12 2v13" } }], p.size); }
+function HomeIcon(p) { return icon([{ attrs: { d: "m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z", fill: p.filled ? "currentColor" : "none" } }], p.size); }
+function UserIcon(p) {
+  return icon([
+    { attrs: { d: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2", fill: p.filled ? "currentColor" : "none" } },
+    { tag: "circle", attrs: { cx: "12", cy: "7", r: "4", fill: p.filled ? "currentColor" : "none" } }
+  ], p.size);
+}
+function LogoutIcon(p) { return icon([{ attrs: { d: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" } }, { attrs: { d: "M16 17l5-5-5-5" } }, { attrs: { d: "M21 12H9" } }], p.size); }
+function CameraIcon(p) {
+  return icon([
+    { attrs: { d: "M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" } },
+    { tag: "circle", attrs: { cx: "12", cy: "13", r: "3.5" } }
+  ], p.size);
+}
+function MailIcon(p) { return icon([{ tag: "rect", attrs: { x: "2", y: "4", width: "20", height: "16", rx: "2" } }, { attrs: { d: "m22 6-10 7L2 6" } }], p.size); }
+function LockIcon(p) { return icon([{ tag: "rect", attrs: { x: "3", y: "11", width: "18", height: "11", rx: "2" } }, { attrs: { d: "M7 11V7a5 5 0 0 1 10 0v4" } }], p.size); }
+function XIcon(p) { return icon([{ attrs: { d: "M18 6 6 18" } }, { attrs: { d: "M6 6l12 12" } }], p.size); }
+function CheckIcon(p) { return icon([{ attrs: { d: "M20 6 9 17l-5-5" } }], p.size); }
+function SparkleIcon(p) { return icon([{ attrs: { d: "M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Z", fill: "currentColor" } }], p.size, { stroke: "none" }); }
+function AlertIcon(p) { return icon([{ tag: "circle", attrs: { cx: "12", cy: "12", r: "10" } }, { attrs: { d: "M12 8v4" } }, { attrs: { d: "M12 16h.01" } }], p.size); }
+function LoaderIcon(p) {
+  return e("span", { className: "nova-spin" }, icon([{ attrs: { d: "M21 12a9 9 0 1 1-6.219-8.56" } }], p.size));
+}
+
+function NovaMark(props) {
+  var size = props.size || 40;
+  var gid = "g" + Math.random().toString(36).slice(2);
+  return e("svg", { width: size, height: size, viewBox: "0 0 100 100", fill: "none" },
+    e("defs", null, e("linearGradient", { id: gid, x1: "15", y1: "20", x2: "85", y2: "80", gradientUnits: "userSpaceOnUse" },
+      e("stop", { offset: "0", stopColor: "#8B5CF6" }),
+      e("stop", { offset: "0.55", stopColor: "#EC4899" }),
+      e("stop", { offset: "1", stopColor: "#3B82F6" })
+    )),
+    e("rect", { width: "100", height: "100", rx: "26", fill: "#0E0E18" }),
+    e("path", { d: "M30 72V28a4 4 0 0 1 6.7-3l33 40a4 4 0 0 1-3 6.6H30", stroke: "url(#" + gid + ")", strokeWidth: "9", strokeLinecap: "round", strokeLinejoin: "round", fill: "none" }),
+    e("g", { transform: "translate(70 26)" }, e("path", { d: "M0 -10 L2.6 -2.6 L10 0 L2.6 2.6 L0 10 L-2.6 2.6 L-10 0 L-2.6 -2.6 Z", fill: "#F0A8E0" }))
+  );
+}
+
+function Avatar(props) {
+  var user = props.user || {};
+  var size = props.size || 44;
+  var style = { width: size, height: size, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, color: "#fff", flexShrink: 0, overflow: "hidden", fontSize: size * 0.4, background: "linear-gradient(135deg,#8B5CF6,#EC4899 55%,#3B82F6)" };
+  if (user.avatar) {
+    return e("div", { style: style }, e("img", { src: user.avatar, alt: user.name, style: { width: "100%", height: "100%", objectFit: "cover" } }));
+  }
+  return e("div", { style: style }, (user.name && user.name[0] ? user.name[0].toUpperCase() : "?"));
+}
+
+function Spinner(props) {
+  return e("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 40, color: "#8C8CA6", fontSize: 14 } },
+    e(LoaderIcon, { size: 18 }), props.label);
+}
+
+var labelStyle = { display: "block", fontSize: 12, color: "#8C8CA6", marginBottom: 6, marginTop: 14 };
+var inputStyle = { width: "100%", boxSizing: "border-box", background: "#0E0E18", border: "1px solid #26263A", borderRadius: 10, padding: "11px 12px", color: "#F2F2F7", fontSize: 14, fontFamily: "inherit", outline: "none" };
+var inputIconStyle = { position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#57576b" };
+function btnStyle(kind) {
+  var base = { width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 999, padding: "12px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", border: "1px solid transparent" };
+  if (kind === "solid") return Object.assign({}, base, { background: "linear-gradient(135deg,#8B5CF6,#EC4899 60%,#3B82F6)", color: "#fff" });
+  if (kind === "outline") return Object.assign({}, base, { background: "#fff", color: "#1a1a1a" });
+  return Object.assign({}, base, { background: "transparent", color: "#8C8CA6" });
+}
+var iconBtn = { display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", cursor: "pointer", fontSize: 13, color: "#8C8CA6" };
+
+function timeAgo(ts) {
+  var diff = Math.max(0, Date.now() - ts);
+  var m = Math.floor(diff / 60000);
+  if (m < 1) return "الآن";
+  if (m < 60) return "قبل " + m + " د";
+  var h = Math.floor(m / 60);
+  if (h < 24) return "قبل " + h + " س";
+  return "قبل " + Math.floor(h / 24) + " يوم";
+}
+
+/* ================= LOGIN ================= */
+function LoginScreen(props) {
+  var onAuthed = props.onAuthed;
+  var config = props.config;
+  var useState = React.useState;
+  var useEffect = React.useEffect;
+  var useRef = React.useRef;
+
+  var modeState = useState("start"); var mode = modeState[0], setMode = modeState[1];
+  var formState = useState({ name: "", email: "", password: "" }); var form = formState[0], setForm = formState[1];
+  var errorState = useState(""); var error = errorState[0], setError = errorState[1];
+  var busyState = useState(false); var busy = busyState[0], setBusy = busyState[1];
+  var googleBtnRef = useRef(null);
+
+  useEffect(function () {
+    if (!config || !config.googleEnabled || !window.google || mode !== "start") return;
+    window.google.accounts.id.initialize({
+      client_id: config.googleClientId,
+      callback: function (resp) {
+        setBusy(true); setError("");
+        apiCall("/api/auth/google", { method: "POST", body: { credential: resp.credential } })
+          .then(function (data) {
+            localStorage.setItem("nova_token", data.token);
+            onAuthed(data.user);
+          })
+          .catch(function (e) { setError(e.message); })
+          .finally(function () { setBusy(false); });
+      }
+    });
+    if (googleBtnRef.current) {
+      window.google.accounts.id.renderButton(googleBtnRef.current, { theme: "filled_black", size: "large", width: 312, locale: "ar" });
+    }
+  }, [config, mode]);
+
+  function updateForm(key, value) {
+    var next = {}; next[key] = value;
+    setForm(Object.assign({}, form, next));
+  }
+
+  function submit(ev) {
+    ev.preventDefault();
+    setError(""); setBusy(true);
+    var path = mode === "signup" ? "/api/auth/register" : "/api/auth/login";
+    var body = mode === "signup" ? form : { email: form.email, password: form.password };
+    apiCall(path, { method: "POST", body: body })
+      .then(function (data) {
+        localStorage.setItem("nova_token", data.token);
+        onAuthed(data.user);
+      })
+      .catch(function (e) { setError(e.message); })
+      .finally(function () { setBusy(false); });
+  }
+
+  var errorBox = error ? e("div", { style: { display: "flex", gap: 8, alignItems: "center", background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E", borderRadius: 10, padding: "9px 12px", fontSize: 13, marginBottom: 14 } }, e(AlertIcon, { size: 15 }), error) : null;
+
+  var startBlock = mode === "start" ? e(React.Fragment, null,
+    config && config.googleEnabled
+      ? e("div", { ref: googleBtnRef, style: { display: "flex", justifyContent: "center", marginBottom: 4 } })
+      : e("div", { style: { fontSize: 12, color: "#57576b", textAlign: "center", border: "1px dashed #26263A", borderRadius: 10, padding: 10, marginBottom: 4 } }, "تسجيل الدخول عبر جوجل غير مُفعّل بعد"),
+    e("div", { style: { display: "flex", alignItems: "center", gap: 10, margin: "18px 0", color: "#57576b", fontSize: 12 } },
+      e("div", { style: { flex: 1, height: 1, background: "#26263A" } }), "أو", e("div", { style: { flex: 1, height: 1, background: "#26263A" } })),
+    e("button", { onClick: function () { setMode("login"); }, style: btnStyle("solid") }, e(MailIcon, { size: 17 }), "الدخول بالبريد الإلكتروني"),
+    e("button", { onClick: function () { setMode("signup"); }, style: Object.assign({}, btnStyle("ghost"), { marginTop: 8 }) }, "ليس لديك حساب؟ أنشئ حساباً جديداً")
+  ) : null;
+
+  var formBlock = (mode === "login" || mode === "signup") ? e("form", { onSubmit: submit },
+    mode === "signup" ? e(React.Fragment, null,
+      e("label", { style: labelStyle }, "الاسم"),
+      e("input", { style: inputStyle, value: form.name, onChange: function (ev) { updateForm("name", ev.target.value); }, placeholder: "اسمك الكامل", required: true })
+    ) : null,
+    e("label", { style: labelStyle }, "البريد الإلكتروني"),
+    e("div", { style: { position: "relative" } },
+      e(MailIcon, { size: 16, style: inputIconStyle }),
+      e("input", { style: Object.assign({}, inputStyle, { paddingRight: 38 }), type: "email", value: form.email, onChange: function (ev) { updateForm("email", ev.target.value); }, placeholder: "you@example.com", required: true })
+    ),
+    e("label", { style: labelStyle }, "كلمة المرور"),
+    e("div", { style: { position: "relative" } },
+      e(LockIcon, { size: 16, style: inputIconStyle }),
+      e("input", { style: Object.assign({}, inputStyle, { paddingRight: 38 }), type: "password", value: form.password, onChange: function (ev) { updateForm("password", ev.target.value); }, placeholder: "6 أحرف على الأقل", required: true })
+    ),
+    e("button", { type: "submit", disabled: busy, style: Object.assign({}, btnStyle("solid"), { marginTop: 6 }) }, busy ? e(LoaderIcon, { size: 16 }) : (mode === "signup" ? "إنشاء الحساب" : "دخول")),
+    e("button", { type: "button", onClick: function () { setMode("start"); setError(""); }, style: Object.assign({}, btnStyle("ghost"), { marginTop: 8 }) }, "رجوع")
+  ) : null;
+
+  return e("div", { dir: "rtl", style: { minHeight: "100vh", background: "radial-gradient(circle at 30% 0%, #1a1030 0%, #0A0A12 55%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 } },
+    e("div", { style: { marginBottom: 28, textAlign: "center" } },
+      e(NovaMark, { size: 72 }),
+      e("h1", { style: { fontFamily: "'Space Grotesk', sans-serif", fontSize: 30, fontWeight: 700, marginTop: 16, marginBottom: 4 } }, "nova"),
+      e("p", { style: { color: "#8C8CA6", fontSize: 14, margin: 0 } }, "فضاءك لمشاركة اللحظة")
+    ),
+    e("div", { style: { width: "100%", maxWidth: 360, background: "#14141F", border: "1px solid #26263A", borderRadius: 20, padding: 24 } },
+      errorBox, startBlock, formBlock
+    )
+  );
+}
+
+/* ================= TWEET ================= */
+function Tweet(props) {
+  var tweet = props.tweet, onLike = props.onLike, onRetweet = props.onRetweet;
+  var useState = React.useState;
+  var burstState = useState(false); var burst = burstState[0], setBurst = burstState[1];
+
+  function doLike() {
+    if (!tweet.liked) { setBurst(true); setTimeout(function () { setBurst(false); }, 500); }
+    onLike(tweet);
+  }
+
+  return e("div", { style: { display: "flex", gap: 12, padding: 16, borderBottom: "1px solid #1C1C2A" } },
+    e(Avatar, { user: { name: tweet.authorName, avatar: tweet.authorAvatar } }),
+    e("div", { style: { flex: 1, minWidth: 0 } },
+      e("div", { style: { display: "flex", gap: 6, alignItems: "baseline", flexWrap: "wrap" } },
+        e("span", { style: { fontWeight: 700, fontSize: 14.5 } }, tweet.authorName),
+        e("span", { style: { color: "#8C8CA6", fontSize: 13 } }, "@" + tweet.authorUsername),
+        e("span", { style: { color: "#57576b", fontSize: 12 } }, "· " + timeAgo(tweet.createdAt))
+      ),
+      e("p", { style: { margin: "4px 0 10px", fontSize: 15, lineHeight: 1.6, whiteSpace: "pre-wrap" } }, tweet.content),
+      e("div", { style: { display: "flex", justifyContent: "space-between", maxWidth: 320 } },
+        e("button", { style: iconBtn }, e(MessageIcon, { size: 17 }), e("span", null, tweet.replies || 0)),
+        e("button", { onClick: function () { onRetweet(tweet); }, style: Object.assign({}, iconBtn, { color: tweet.retweeted ? "#10B981" : "#8C8CA6" }) },
+          e(RepeatIcon, { size: 18 }), e("span", null, tweet.retweetsCount || 0)),
+        e("button", { onClick: doLike, style: Object.assign({}, iconBtn, { color: tweet.liked ? "#F43F5E" : "#8C8CA6", position: "relative" }) },
+          e(HeartIcon, { size: 17, filled: tweet.liked }), e("span", null, tweet.likesCount || 0),
+          burst ? e("span", { style: { position: "absolute", right: -6, top: -10, color: "#EC4899", animation: "novaPop 0.5s ease-out forwards" } }, e(SparkleIcon, { size: 16 })) : null
+        ),
+        e("button", { style: iconBtn }, e(ShareIcon, { size: 16 }))
+      )
+    )
+  );
+}
+
+/* ================= FEED ================= */
+function Feed(props) {
+  var user = props.user, tweets = props.tweets, setTweets = props.setTweets, loadingFeed = props.loadingFeed;
+  var useState = React.useState;
+  var textState = useState(""); var text = textState[0], setText = textState[1];
+  var postingState = useState(false); var posting = postingState[0], setPosting = postingState[1];
+  var errState = useState(""); var err = errState[0], setErr = errState[1];
+
+  function post() {
+    if (!text.trim()) return;
+    setPosting(true); setErr("");
+    apiCall("/api/tweets", { method: "POST", body: { content: text.trim() } })
+      .then(function (data) { setTweets([data.tweet].concat(tweets)); setText(""); })
+      .catch(function (e) { setErr(e.message); })
+      .finally(function () { setPosting(false); });
+  }
+  function like(t) {
+    setTweets(tweets.map(function (x) { return x.id === t.id ? Object.assign({}, x, { liked: !x.liked, likesCount: x.likesCount + (x.liked ? -1 : 1) }) : x; }));
+    apiCall("/api/tweets/" + t.id + "/like", { method: "POST" }).catch(function () {});
+  }
+  function retweet(t) {
+    setTweets(tweets.map(function (x) { return x.id === t.id ? Object.assign({}, x, { retweeted: !x.retweeted, retweetsCount: x.retweetsCount + (x.retweeted ? -1 : 1) }) : x; }));
+    apiCall("/api/tweets/" + t.id + "/retweet", { method: "POST" }).catch(function () {});
+  }
+
+  var feedBody;
+  if (loadingFeed) {
+    feedBody = e(Spinner, { label: "جارٍ تحميل التغريدات..." });
+  } else if (tweets.length === 0) {
+    feedBody = e("p", { style: { textAlign: "center", color: "#57576b", padding: 40, fontSize: 14 } }, "لا توجد تغريدات بعد. كن أول من ينشر!");
+  } else {
+    feedBody = tweets.map(function (t) { return e(Tweet, { key: t.id, tweet: t, onLike: like, onRetweet: retweet }); });
+  }
+
+  return e("div", null,
+    e("div", { style: { display: "flex", gap: 12, padding: 16, borderBottom: "1px solid #1C1C2A" } },
+      e(Avatar, { user: user }),
+      e("div", { style: { flex: 1 } },
+        e("textarea", {
+          value: text, onChange: function (ev) { setText(ev.target.value); }, placeholder: "بماذا تفكر؟", rows: 2, maxLength: 280,
+          style: { width: "100%", boxSizing: "border-box", resize: "none", background: "transparent", border: "none", outline: "none", color: "#F2F2F7", fontSize: 16, fontFamily: "inherit" }
+        }),
+        err ? e("div", { style: { color: "#F43F5E", fontSize: 12, marginBottom: 6 } }, err) : null,
+        e("div", { style: { display: "flex", justifyContent: "flex-end" } },
+          e("button", { onClick: post, disabled: !text.trim() || posting, style: Object.assign({}, btnStyle("solid"), { width: "auto", padding: "8px 20px", opacity: (text.trim() && !posting) ? 1 : 0.5 }) },
+            posting ? e(LoaderIcon, { size: 15 }) : "نشر")
+        )
+      )
+    ),
+    feedBody
+  );
+}
+
+/* ================= PROFILE ================= */
+function ProfileScreen(props) {
+  var user = props.user, setUser = props.setUser, tweets = props.tweets;
+  var useState = React.useState, useEffect = React.useEffect, useRef = React.useRef;
+  var editingState = useState(false); var editing = editingState[0], setEditing = editingState[1];
+  var draftState = useState(user); var draft = draftState[0], setDraft = draftState[1];
+  var savingState = useState(false); var saving = savingState[0], setSaving = savingState[1];
+  var errState = useState(""); var err = errState[0], setErr = errState[1];
+  var fileRef = useRef(null);
+
+  useEffect(function () { if (editing) { setDraft(user); setErr(""); } }, [editing, user]);
+
+  function pickImage(ev) {
+    var file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) { setErr("الصورة كبيرة جداً (الحد الأقصى 4MB)."); return; }
+    var fd = new FormData();
+    fd.append("avatar", file);
+    setSaving(true);
+    apiCall("/api/auth/avatar", { method: "POST", isForm: true, body: fd })
+      .then(function (data) { setDraft(data.user); setUser(data.user); })
+      .catch(function (e) { setErr(e.message); })
+      .finally(function () { setSaving(false); });
+  }
+
+  function save() {
+    setErr(""); setSaving(true);
+    apiCall("/api/auth/me", { method: "PUT", body: { name: draft.name, username: draft.username, bio: draft.bio } })
+      .then(function (data) { setUser(data.user); setEditing(false); })
+      .catch(function (e) { setErr(e.message); })
+      .finally(function () { setSaving(false); });
+  }
+
+  var myTweets = tweets.filter(function (t) { return t.authorId === user.id; });
+
+  var editModal = editing ? e("div", {
+    style: { position: "fixed", inset: 0, background: "rgba(5,5,10,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 },
+    onClick: function () { setEditing(false); }
+  },
+    e("div", { onClick: function (ev) { ev.stopPropagation(); }, style: { width: "100%", maxWidth: 380, background: "#14141F", border: "1px solid #26263A", borderRadius: 18, padding: 20, maxHeight: "85vh", overflowY: "auto" } },
+      e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } },
+        e("h3", { style: { margin: 0, fontFamily: "'Space Grotesk', sans-serif", fontSize: 17 } }, "تعديل الملف الشخصي"),
+        e("button", { onClick: function () { setEditing(false); }, style: { background: "none", border: "none", color: "#8C8CA6", cursor: "pointer" } }, e(XIcon, { size: 20 }))
+      ),
+      err ? e("div", { style: { display: "flex", gap: 8, alignItems: "center", background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E", borderRadius: 10, padding: "9px 12px", fontSize: 13, marginBottom: 14 } }, e(AlertIcon, { size: 15 }), err) : null,
+      e("div", { style: { display: "flex", justifyContent: "center", marginBottom: 16 } },
+        e("div", { style: { position: "relative" } },
+          e(Avatar, { user: draft, size: 84 }),
+          e("button", { onClick: function () { fileRef.current && fileRef.current.click(); }, style: { position: "absolute", bottom: -2, left: -2, background: "#0A0A12", border: "1px solid #26263A", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#F2F2F7" } }, e(CameraIcon, { size: 14 })),
+          e("input", { ref: fileRef, type: "file", accept: "image/*", hidden: true, onChange: pickImage })
+        )
+      ),
+      e("label", { style: labelStyle }, "الاسم"),
+      e("input", { style: inputStyle, value: draft.name, onChange: function (ev) { setDraft(Object.assign({}, draft, { name: ev.target.value })); } }),
+      e("label", { style: labelStyle }, "اسم المستخدم"),
+      e("div", { style: { position: "relative" } },
+        e("span", { style: { position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#57576b", fontSize: 14 } }, "@"),
+        e("input", { style: Object.assign({}, inputStyle, { paddingRight: 26 }), value: draft.username, onChange: function (ev) { setDraft(Object.assign({}, draft, { username: ev.target.value })); } })
+      ),
+      e("label", { style: labelStyle }, "النبذة التعريفية"),
+      e("textarea", { style: Object.assign({}, inputStyle, { resize: "none" }), rows: 3, value: draft.bio || "", onChange: function (ev) { setDraft(Object.assign({}, draft, { bio: ev.target.value })); } }),
+      e("div", { style: { display: "flex", gap: 10, marginTop: 18 } },
+        e("button", { onClick: save, disabled: saving, style: Object.assign({}, btnStyle("solid"), { display: "flex", gap: 6 }) }, saving ? e(LoaderIcon, { size: 16 }) : e(CheckIcon, { size: 16 }), " حفظ"),
+        e("button", { onClick: function () { setEditing(false); }, style: btnStyle("outline") }, "إلغاء")
+      )
+    )
+  ) : null;
+
+  var tweetsList = myTweets.length === 0
+    ? e("p", { style: { textAlign: "center", color: "#57576b", padding: 40, fontSize: 14 } }, "لم تنشر أي تغريدة بعد.")
+    : myTweets.map(function (t) { return e(Tweet, { key: t.id, tweet: t, onLike: function () {}, onRetweet: function () {} }); });
+
+  return e("div", null,
+    e("div", { style: { height: 110, background: "linear-gradient(120deg,#3B1E63,#5D2560 45%,#1E3A63)" } }),
+    e("div", { style: { padding: "0 16px" } },
+      e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: -38 } },
+        e("div", { style: { border: "4px solid #0A0A12", borderRadius: "50%", background: "#0A0A12" } }, e(Avatar, { user: user, size: 78 })),
+        e("button", { onClick: function () { setEditing(true); }, style: Object.assign({}, btnStyle("outline"), { width: "auto", padding: "8px 18px", marginBottom: 6 }) }, "تعديل الملف الشخصي")
+      ),
+      e("h2", { style: { fontFamily: "'Space Grotesk', sans-serif", margin: "12px 0 0", fontSize: 20 } }, user.name),
+      e("p", { style: { color: "#8C8CA6", margin: "2px 0 10px", fontSize: 14 } }, "@" + user.username),
+      user.bio ? e("p", { style: { margin: "0 0 14px", fontSize: 14.5, lineHeight: 1.6 } }, user.bio) : null,
+      e("div", { style: { display: "flex", gap: 18, fontSize: 13, color: "#8C8CA6", paddingBottom: 14, borderBottom: "1px solid #1C1C2A" } },
+        e("span", null, e("b", { style: { color: "#F2F2F7" } }, myTweets.length), " تغريدات")
+      )
+    ),
+    tweetsList,
+    editModal
+  );
+}
+
+/* ================= APP ================= */
+function App() {
+  var useState = React.useState, useEffect = React.useEffect;
+  var statusState = useState("loading"); var status = statusState[0], setStatus = statusState[1];
+  var userState = useState(null); var user = userState[0], setUser = userState[1];
+  var viewState = useState("feed"); var view = viewState[0], setView = viewState[1];
+  var tweetsState = useState([]); var tweets = tweetsState[0], setTweets = tweetsState[1];
+  var loadingFeedState = useState(false); var loadingFeed = loadingFeedState[0], setLoadingFeed = loadingFeedState[1];
+  var configState = useState(null); var config = configState[0], setConfig = configState[1];
+
+  function loadTweets() {
+    setLoadingFeed(true);
+    return apiCall("/api/tweets").then(function (data) { setTweets(data.tweets); }).catch(function () {}).finally(function () { setLoadingFeed(false); });
+  }
+
+  useEffect(function () {
+    apiCall("/api/config").then(setConfig).catch(function () { setConfig({ googleEnabled: false }); });
+    var token = localStorage.getItem("nova_token");
+    if (token) {
+      apiCall("/api/auth/me").then(function (data) {
+        setUser(data.user);
+        setStatus("app");
+        return loadTweets();
+      }).catch(function () {
+        localStorage.removeItem("nova_token");
+        setStatus("auth");
+      });
+    } else {
+      setStatus("auth");
+    }
+  }, []);
+
+  function onAuthed(u) {
+    setUser(u);
+    setStatus("app");
+    loadTweets();
+  }
+  function logout() {
+    localStorage.removeItem("nova_token");
+    setUser(null);
+    setView("feed");
+    setStatus("auth");
+  }
+
+  if (status === "loading") {
+    return e("div", { style: { minHeight: "100vh", background: "#0A0A12" } }, e(Spinner, { label: "جارٍ التحميل..." }));
+  }
+  if (status === "auth" || !user) {
+    return e(LoginScreen, { onAuthed: onAuthed, config: config });
+  }
+
+  var navBtn = function (key, IconComp, label) {
+    return e("button", {
+      onClick: function () { setView(key); },
+      style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "10px 0", background: "none", border: "none", cursor: "pointer", color: view === key ? "#F2F2F7" : "#57576b" }
+    }, e(IconComp, { size: 22, filled: view === key }), e("span", { style: { fontSize: 11 } }, label));
+  };
+
+  return e("div", { dir: "rtl", style: { minHeight: "100vh", background: "#0A0A12", color: "#F2F2F7" } },
+    e("div", { style: { maxWidth: 600, margin: "0 auto", borderInline: "1px solid #1C1C2A", minHeight: "100vh" } },
+      e("header", { style: { position: "sticky", top: 0, zIndex: 10, background: "rgba(10,10,18,0.85)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: "1px solid #1C1C2A" } },
+        e("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, e(NovaMark, { size: 30 }), e("span", { style: { fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 17 } }, "nova")),
+        e("button", { onClick: logout, style: Object.assign({}, iconBtn, { fontSize: 13 }) }, e(LogoutIcon, { size: 16 }), " خروج")
+      ),
+      e("main", { style: { paddingBottom: 70 } },
+        view === "feed"
+          ? e(Feed, { user: user, tweets: tweets, setTweets: setTweets, loadingFeed: loadingFeed })
+          : e(ProfileScreen, { user: user, setUser: setUser, tweets: tweets })
+      ),
+      e("nav", { style: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 600, display: "flex", background: "rgba(10,10,18,0.92)", backdropFilter: "blur(8px)", borderTop: "1px solid #1C1C2A" } },
+        navBtn("feed", HomeIcon, "الرئيسية"),
+        navBtn("profile", UserIcon, "حسابي")
+      )
+    )
+  );
+}
+
+var rootEl = document.getElementById("root");
+ReactDOM.createRoot(rootEl).render(e(App));
+rootEl.dataset.mounted = "1";
+</script>
+</body>
+</html>
